@@ -4,3 +4,10 @@ python-multipart
 starlette
 uvicorn[standard]
 yt-dlp
+pysocks
+tqdm
+calmjs
+calmjs.types
+requests[socks]
+pycryptodomex
+beautifulsoup4==4.7.1

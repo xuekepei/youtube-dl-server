@@ -8,6 +8,7 @@ from starlette.templating import Jinja2Templates
 from starlette.background import BackgroundTask
 
 import uvicorn
+import duboku
 from yt_dlp import YoutubeDL
 from collections import ChainMap
 
@@ -25,15 +26,30 @@ app_defaults = {
     "YDL_UPDATE_TIME": "True",
 }
 
+app_duboku_defaults = {
+    "dir": "/duboku-dl",
+    "file": None,
+    "from_ep": None,
+    "to_ep": None,
+    "debug": False,
+    "proxy": None,
+    "proxy_local": None,
+    "downloadAll": True,
+}
+
 
 async def dl_queue_list(request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
+async def dl_duboku_queue_list(request):
+    return templates.TemplateResponse("index-duboku.html", {"request": request})
+
+
 async def q_put(request):
     form = await request.form()
     url = form.get("url").strip()
-    options = {"format": form.get("format")}
+    options = {"format": form.get("format"), "platform": form.get("platform")}
 
     if not url:
         return JSONResponse(
@@ -109,13 +125,39 @@ def get_ydl_options(request_options):
     }
 
 
+def get_duboku_args(request_options):
+    request_vars = {
+        "from_ep": None,
+        "to_ep": None,
+    }
+
+    duboku_vars = ChainMap(request_vars, os.environ, app_duboku_defaults)
+
+    return {
+        "dir": duboku_vars["dir"],
+        "file": duboku_vars["file"],
+        "from_ep": duboku_vars["from_ep"],
+        "to_ep": duboku_vars["to_ep"],
+        "debug": duboku_vars["debug"],
+        "proxy": duboku_vars["proxy"],
+        "proxy_local": duboku_vars["proxy_local"],
+        "downloadAll": duboku_vars["downloadAll"],
+    }
+
+
 def download(url, request_options):
-    with YoutubeDL(get_ydl_options(request_options)) as ydl:
-        ydl.download([url])
+    if request_options.get("platform") == "duboku":
+        args = get_duboku_args(request_options)
+        duboku.main(args['dir'], args['file'], args['from_ep'], args['to_ep'], url, sys.stdout, args['debug'],
+                    args['proxy'], args['proxy_local'], args['downloadAll'])
+    else:
+        with YoutubeDL(get_ydl_options(request_options)) as ydl:
+            ydl.download([url])
 
 
 routes = [
     Route("/youtube-dl", endpoint=dl_queue_list),
+    Route("/duboku-dl", endpoint=dl_duboku_queue_list),
     Route("/youtube-dl/q", endpoint=q_put, methods=["POST"]),
     Route("/youtube-dl/update", endpoint=update_route, methods=["PUT"]),
     Mount("/youtube-dl/static", app=StaticFiles(directory="static"), name="static"),
